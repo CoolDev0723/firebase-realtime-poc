@@ -1,12 +1,55 @@
 import './App.css';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import firebase from "firebase/compat/app";
+import "firebase/compat/database";
+
+
+// Initialize Firebase
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_APIKEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTHDOMAIN,
+  databaseURL: process.env.REACT_APP_FIREBASE_DATABASEURL,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECTID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGEBUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGINGSENDERID,
+  appId: process.env.REACT_APP_FIREBASE_APPID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENTID
+};
+
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
 
 function App() {
+  const [selectedUser, setSelectedUser] = useState("user1");
   const [sendMessage, setSendMessage] = useState("");
   const [sendBtnDisabled, setSendBtnDisabled] = useState(false);
-  const [getBtnDisabled, setGetBtnDisabled] = useState(false);
   const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    const messagesRef = db.ref("messages");
+
+    messagesRef.on("value", (snapshot) => {
+      try {
+        const messagesData = snapshot.val();
+        if (messagesData) {
+          const filteredMessages = Object.values(messagesData).filter(message => message.recipientId === "user2");
+          setMessages(filteredMessages);
+        } else {
+          setMessages([]);
+        }
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      }
+    });
+
+    return () => {
+      messagesRef.off("value");
+    };
+  }, []);
 
   const postMessage = async() => {
     setSendBtnDisabled(true);
@@ -17,54 +60,33 @@ function App() {
     };
     await axios.post('http://localhost:3000/users/send_message', params);
     setSendBtnDisabled(false);
+    setSendMessage("");
   }
 
-  const getMessage = () => {
-    setGetBtnDisabled(true);
-    const params = {
-      user_id: 'user2',
-    };
-    axios.post('http://localhost:3000/users/get_message', params)
-      .then(response => {
-        console.log("data", response.data);
-        let get_messages = [];
-        if (Object.keys(response.data).length > 0) {
-          let sort_by_timestamp = {};
-          Object.keys(response.data).map((key)=>{
-            sort_by_timestamp[response.data[key]["timestamp"]] = response.data[key];
-          })
-          console.log("sort_by_timestamp", sort_by_timestamp);
-          Object.keys(sort_by_timestamp).sort().reverse().forEach(key => {
-            get_messages.push(sort_by_timestamp[key]);
-          });
-          console.log("get_messages", get_messages);
-        }
-        setMessages(get_messages);
-        setGetBtnDisabled(false);
-      });
-  }
+  console.log("messages", messages);
 
   return (
-    <div style={{width:"50%", margin: "auto"}}>
-      <div >
-        <p>USER1</p>
-        <input onChange={(e)=>setSendMessage(e.target.value)} value={sendMessage} />
-        <button onClick={postMessage} disabled={sendBtnDisabled}>send message</button>
+    <div style={{width:"50%", margin: "auto", marginTop:"100px"}}>
+      <div style={{display: "flex", justifyContent:"space-between"}}>
+        <button onClick={()=>setSelectedUser("user1")} disabled={selectedUser === "user1"}>USER 1</button>
+        <button onClick={()=>setSelectedUser("user2")} disabled={selectedUser === "user2"}>USER 2</button>
       </div>
-      <div >
-        <p>USER2</p>
-        <button onClick={getMessage} disabled={getBtnDisabled}>get message</button>
-        {messages.length > 0 && (
-          messages.map(message_info=>{
-            return (
-              <>
-                <div>Sender ID: {message_info.senderId}</div>
-                <div>Message: {message_info.message}</div>
-              </>
-            )
-          })
-        )}
-      </div>
+      {selectedUser === "user1" && (
+        <div style={{marginTop: "10px"}}>
+          <input onChange={(e)=>setSendMessage(e.target.value)} value={sendMessage} />
+          <button onClick={postMessage} disabled={sendBtnDisabled}>send message</button>
+        </div>
+      )}
+      {selectedUser === "user2" && (
+        <div>
+          <h1>Messages</h1>
+          <ul>
+            {messages.map((message, index) => (
+              <li key={index}>{message.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
